@@ -5,7 +5,7 @@
   "author": "Michael Turner",
   "license": "MIT",
   "scripts": {
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "build": "nest build",
