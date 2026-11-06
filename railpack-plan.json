@@ -1,0 +1,22 @@
+{
+  "$schema": "https://railpack.com/schema/railpack-plan.json",
+  "build": {
+    "root": "backend",
+    "exclude": [
+      "admin-ui",
+      "frontend",
+      "shared",
+      ".venv",
+      "venv"
+    ],
+    "steps": [
+      {
+        "name": "Install Python dependencies",
+        "command": "pip install -r requirements.txt"
+      }
+    ]
+  },
+  "deploy": {
+    "command": "uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}"
+  }
+}
