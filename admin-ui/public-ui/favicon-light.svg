@@ -1,0 +1,21 @@
+<svg width="256" height="256" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Light background -->
+  <rect width="512" height="512" fill="#FFFFFF"/>
+
+  <!-- Outer Hexagon -->
+  <polygon 
+    points="256,96 392,176 392,336 256,416 120,336 120,176"
+    fill="#F5F5F5"
+    stroke="#3CF46B"
+    stroke-width="20"
+  />
+
+  <!-- Hybrid X Shape -->
+  <g stroke="#3CF46B" stroke-width="32" stroke-linecap="round">
+    <line x1="176" y1="176" x2="336" y2="336"/>
+    <line x1="336" y1="176" x2="176" y2="336"/>
+  </g>
+
+  <!-- Neon Core -->
+  <circle cx="256" cy="256" r="70" fill="#3CF46B" opacity="0.9" />
+</svg>

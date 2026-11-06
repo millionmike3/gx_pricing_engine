@@ -1,0 +1,9 @@
+<svg viewBox="0 0 24 24" fill="none" stroke="#4B5563" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 20V4" stroke="#6B7280"/>
+  <path d="M4 20h16" stroke="#6B7280"/>
+  <path d="M8 14l3-4 3 3 4-6" stroke="#2563EB"/>
+  <circle cx="8" cy="14" r="1.5" fill="#93C5FD"/>
+  <circle cx="11" cy="10" r="1.5" fill="#93C5FD"/>
+  <circle cx="14" cy="13" r="1.5" fill="#93C5FD"/>
+  <circle cx="18" cy="7" r="1.5" fill="#93C5FD"/>
+</svg>

@@ -1,0 +1,121 @@
+/* ---------------------------------------------------------
+   GENXBABY — GLOBAL BRAND STYLESHEET
+   Next.js 16 • Tailwind • Dark OS Theme
+--------------------------------------------------------- */
+
+/* Root Theme */
+:root {
+  --gx-bg: #0b1120;
+  --gx-bg-light: #111827;
+  --gx-text: #e5e7eb;
+  --gx-text-muted: #9ca3af;
+  --gx-accent-blue: #38bdf8;
+  --gx-accent-orange: #f97316;
+  --gx-card: rgba(255, 255, 255, 0.05);
+  --gx-border: rgba(255, 255, 255, 0.1);
+}
+
+/* Global Reset */
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: var(--gx-bg);
+  color: var(--gx-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Links */
+a {
+  color: var(--gx-accent-blue);
+  text-decoration: none;
+}
+a:hover {
+  opacity: 0.8;
+}
+
+/* Layout Wrappers */
+main {
+  padding: 1.5rem;
+}
+
+/* Cards */
+.gx-card {
+  background: var(--gx-card);
+  border: 1px solid var(--gx-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+/* Buttons */
+.gx-btn {
+  background: linear-gradient(135deg, var(--gx-accent-blue), var(--gx-accent-orange));
+  color: #0b1120;
+  font-weight: bold;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+}
+.gx-btn:hover {
+  opacity: 0.9;
+}
+
+/* Inputs */
+input,
+select,
+textarea {
+  background: var(--gx-bg-light);
+  border: 1px solid var(--gx-border);
+  color: var(--gx-text);
+  padding: 10px;
+  border-radius: 8px;
+  width: 100%;
+}
+
+/* Headings */
+h1,
+h2,
+h3,
+h4 {
+  color: var(--gx-accent-blue);
+  font-weight: 700;
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--gx-bg-light);
+  border-right: 1px solid var(--gx-border);
+  padding: 20px;
+  width: 260px;
+}
+
+/* Navbar */
+.navbar {
+  background: linear-gradient(90deg, var(--gx-accent-blue), var(--gx-accent-orange));
+  padding: 16px;
+  color: #0b1120;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--gx-border);
+}
+th {
+  color: var(--gx-accent-blue);
+  text-align: left;
+}
+
+/* Utility */
+.text-muted {
+  color: var(--gx-text-muted);
+}

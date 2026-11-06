@@ -1,0 +1,36 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Transparent background -->
+  <rect width="512" height="512" fill="none"/>
+
+  <!-- Outer Hexagon -->
+  <polygon 
+    points="256,40 430,150 430,360 256,470 82,360 82,150"
+    fill="#0A0A0A"
+    stroke="#3CF46B"
+    stroke-width="12"
+  />
+
+  <!-- Hybrid X Shape -->
+  <g stroke="#3CF46B" stroke-width="18" stroke-linecap="round">
+    <line x1="160" y1="160" x2="352" y2="352"/>
+    <line x1="352" y1="160" x2="160" y2="352"/>
+  </g>
+
+  <!-- Inner Neon Core -->
+  <circle cx="256" cy="256" r="58" fill="#3CF46B" opacity="0.85" />
+
+  <!-- GENXBABY Wordmark -->
+  <text 
+    x="50%" 
+    y="92%" 
+    text-anchor="middle" 
+    font-family="Arial Black, sans-serif" 
+    font-size="54" 
+    fill="#3CF46B"
+    letter-spacing="4"
+  >
+    GENXBABY
+  </text>
+
+</svg>
