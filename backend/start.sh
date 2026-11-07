@@ -1,5 +1,5 @@
 #!/bin/bash
-uvicorn api_gateway.server:app --app-dir backend --host 0.0.0.0 --port $PORT
-#   t o u c h 
- 
- 
+
+export PYTHONPATH=/app
+
+python -m uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}
