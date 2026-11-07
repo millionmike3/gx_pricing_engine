@@ -9,11 +9,11 @@
     "steps": [
       {
         "name": "Install Python dependencies",
-        "command": "pip install -r requirements.txt"
+        "run": "pip install -r requirements.txt"
       }
     ]
   },
   "deploy": {
-    "command": "python -m uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}"
+    "run": "python -m uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}"
   }
 }
