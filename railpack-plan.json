@@ -1,11 +1,8 @@
 {
   "$schema": "https://railpack.com/schema/railpack-plan.json",
   "build": {
-    "root": "backend",
+    "root": ".",
     "exclude": [
-      "admin-ui",
-      "frontend",
-      "shared",
       ".venv",
       "venv"
     ],
@@ -17,6 +14,6 @@
     ]
   },
   "deploy": {
-    "command": "uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}"
+    "command": "python -m uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}"
   }
 }
