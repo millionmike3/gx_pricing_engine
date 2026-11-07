@@ -1,7 +1,10 @@
-fastapi
-uvicorn
+fastapi==0.115.0
+uvicorn==0.30.0
 httpx
 pydantic
 python-dotenv
 beautifulsoup4
 python-multipart
+starlette
+typing-extensions
+anyio
