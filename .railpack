@@ -1,1 +1,2 @@
-root = "backend"
+[python]
+requirements = "requirements.txt"
