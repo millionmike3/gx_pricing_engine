@@ -14,6 +14,6 @@
     ]
   },
   "deploy": {
-    "run": "python -m uvicorn api_gateway.server:app --host 0.0.0.0 --port ${PORT}"
+    "run": "bash backend/start.sh"
   }
 }
