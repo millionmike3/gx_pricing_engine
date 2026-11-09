@@ -1,0 +1,125 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2026-11-09",
+    "source": "gx_pricing_engine",
+    "description": "Unified pricing matrix aligned with TS pricing models"
+  },
+
+  "baseRates": {
+    "30yr_fixed": 6.250,
+    "15yr_fixed": 5.750,
+    "10yr_fixed": 5.625,
+    "7_1_arm": 5.500,
+    "5_1_arm": 5.375
+  },
+
+  "pricingTiers": {
+    "fico": [
+      { "range": "760+", "adjustment": 0.00 },
+      { "range": "740-759", "adjustment": 0.125 },
+      { "range": "720-739", "adjustment": 0.250 },
+      { "range": "700-719", "adjustment": 0.375 },
+      { "range": "680-699", "adjustment": 0.500 },
+      { "range": "660-679", "adjustment": 0.750 },
+      { "range": "<660", "adjustment": 1.000 }
+    ],
+    "ltv": [
+      { "range": "0-60", "adjustment": 0.00 },
+      { "range": "60-75", "adjustment": 0.250 },
+      { "range": "75-80", "adjustment": 0.375 },
+      { "range": "80-85", "adjustment": 0.500 },
+      { "range": "85-95", "adjustment": 0.750 }
+    ]
+  },
+
+  "llpa": {
+    "ficoLtvGrid": [
+      {
+        "fico": "760+",
+        "ltvAdjustments": {
+          "0-60": 0.00,
+          "60-75": 0.125,
+          "75-80": 0.250,
+          "80-85": 0.375,
+          "85-95": 0.500
+        }
+      },
+      {
+        "fico": "740-759",
+        "ltvAdjustments": {
+          "0-60": 0.125,
+          "60-75": 0.250,
+          "75-80": 0.375,
+          "80-85": 0.500,
+          "85-95": 0.625
+        }
+      },
+      {
+        "fico": "720-739",
+        "ltvAdjustments": {
+          "0-60": 0.250,
+          "60-75": 0.375,
+          "75-80": 0.500,
+          "80-85": 0.625,
+          "85-95": 0.750
+        }
+      }
+    ],
+
+    "occupancy": {
+      "primary": 0.00,
+      "second_home": 0.375,
+      "investment": 1.125
+    },
+
+    "loanPurpose": {
+      "purchase": 0.00,
+      "rate_term": 0.125,
+      "cash_out": 0.750
+    },
+
+    "propertyType": {
+      "single_family": 0.00,
+      "condo": 0.250,
+      "non_warrantable_condo": 1.000,
+      "2_4_unit": 0.750
+    }
+  },
+
+  "riskFactors": {
+    "dti": {
+      "over_45": 0.250,
+      "over_50": 0.500
+    },
+    "firstTimeHomebuyer": -0.125,
+    "bankruptcySeasoningUnder2Years": 1.500,
+    "foreclosureSeasoningUnder3Years": 2.000
+  },
+
+  "productAdjustments": {
+    "jumbo": 0.750,
+    "non_qm": 1.500,
+    "dscr": 1.250,
+    "bank_statement": 2.000,
+    "asset_qualifier": 1.750
+  },
+
+  "eligibilityRules": {
+    "maxLtv": {
+      "primary": 95,
+      "second_home": 90,
+      "investment": 85
+    },
+    "minFico": {
+      "jumbo": 700,
+      "non_qm": 640,
+      "dscr": 620
+    },
+    "maxDti": {
+      "standard": 50,
+      "jumbo": 43,
+      "non_qm": 55
+    }
+  }
+}
