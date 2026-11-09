@@ -25,3 +25,15 @@ app.include_router(admin_router, prefix="/admin")
 # MIDDLEWARE
 app.add_middleware(LoggingMiddleware)
 # app.add_middleware(AuthMiddleware)
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+
+    uvicorn.run(
+        "api_gateway.server:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8000)),
+        reload=True
+    )
+
