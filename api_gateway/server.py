@@ -34,7 +34,7 @@ app.include_router(pricing_router, prefix="/pricing")
 app.include_router(matrix_router, prefix="/matrix")
 app.include_router(config_router, prefix="/config")
 app.include_router(admin_router, prefix="/admin")
-app.include_router(matrix_router)
+
 
 # MIDDLEWARE
 app.add_middleware(LoggingMiddleware)
@@ -48,5 +48,5 @@ if __name__ == "__main__":
         "api_gateway.server:app",
         host="0.0.0.0",
         port=int(os.getenv("PORT", 8000)),
-        reload=True
+        reload=False
     )
