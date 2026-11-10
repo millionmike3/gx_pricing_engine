@@ -18,8 +18,9 @@ app = FastAPI(
 # ⭐ ADD YOUR FRONTEND DOMAIN HERE
 origins = [
     "https://genxbaby-admin-frontend-1qld-bqmcqdmtv-millionmike3s-projects.vercel.app",
-    "http://localhost:3000"
-]
+    "https://genxbaby-admin-frontend.vercel.app",
+    "https://*.vercel.app",
+    "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
