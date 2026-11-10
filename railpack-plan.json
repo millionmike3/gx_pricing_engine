@@ -14,6 +14,7 @@
     ]
   },
   "deploy": {
-    "run": "bash start.sh"
+    "build": "pip install -r requirements.txt",
+    "start": "uvicorn api_gateway.server:app --host 0.0.0.0 --port $PORT"
   }
 }
