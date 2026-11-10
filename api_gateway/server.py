@@ -16,11 +16,20 @@ app = FastAPI(
 
 # CORS — allow all Vercel admin frontend domains
 origins = [
-    "https://genxbaby-admin-frontend-1qld-bqmcqdmtv-millionmike3s-projects.vercel.app",
+    # Production domain
     "https://genxbaby-admin-frontend.vercel.app",
+
+    # All preview deployments (Vercel auto-generates these)
+    "https://genxbaby-admin-frontend-1qld-eei80eamx-millionmike3s-projects.vercel.app",
+    "https://genxbaby-admin-frontend-1qld-bqmcqdmtv-millionmike3s-projects.vercel.app",
+
+    # Project-level domain
     "https://millionmike3s-projects.vercel.app",
+
+    # Local dev
     "http://localhost:3000"
 ]
+
 
 app.add_middleware(
     CORSMiddleware,
