@@ -1,7 +1,8 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# ROUTERS — ONLY import the correct matrix router
+# ROUTERS
 from api_gateway.routes.pricing_routes import router as pricing_router
 from api_gateway.routes.matrix_routes import router as matrix_router
 from api_gateway.routes.config_routes import router as config_router
@@ -14,7 +15,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS — allow all Vercel admin frontend domains
+# AUTHORIZED FRONTEND DOMAINS
 origins = [
     "https://genxbaby-admin-frontend.vercel.app",
     "https://genxbaby-admin-frontend-1qld-eei80eamx-millionmike3s-projects.vercel.app",
@@ -23,22 +24,51 @@ origins = [
     "http://localhost:3000"
 ]
 
-# ⭐ MIDDLEWARE MUST COME FIRST
+# LOGGING MIDDLEWARE
 app.add_middleware(LoggingMiddleware)
 
-# ⭐ CORS MUST COME AFTER LOGGING
+# CORS MIDDLEWARE
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=[
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS"
+    ],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin"
+    ],
+    max_age=600
 )
 
-# ⭐ ROUTES MUST COME LAST
+# API ROUTERS
 app.include_router(pricing_router, prefix="/pricing")
 app.include_router(matrix_router, prefix="/matrix")
 app.include_router(config_router, prefix="/config")
 app.include_router(admin_router, prefix="/admin")
 
 
+# HEALTH CHECK
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "GenXBaby Pricing Engine Gateway"
+    }
+
+
+# ROOT ENDPOINT
+@app.get("/")
+async def root():
+    return {
+        "message": "GenXBaby Pricing Engine Gateway is running",
+        "status": "online"
+    }
