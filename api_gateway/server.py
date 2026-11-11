@@ -41,13 +41,4 @@ app.include_router(matrix_router, prefix="/matrix")
 app.include_router(config_router, prefix="/config")
 app.include_router(admin_router, prefix="/admin")
 
-if __name__ == "__main__":
-    import uvicorn
-    import os
 
-    uvicorn.run(
-        "api_gateway.server:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 8000)),
-        reload=False
-    )
