@@ -16,21 +16,17 @@ app = FastAPI(
 
 # CORS — allow all Vercel admin frontend domains
 origins = [
-    # Production domain
     "https://genxbaby-admin-frontend.vercel.app",
-
-    # All preview deployments (Vercel auto-generates these)
     "https://genxbaby-admin-frontend-1qld-eei80eamx-millionmike3s-projects.vercel.app",
     "https://genxbaby-admin-frontend-1qld-bqmcqdmtv-millionmike3s-projects.vercel.app",
-
-    # Project-level domain
     "https://millionmike3s-projects.vercel.app",
-
-    # Local dev
     "http://localhost:3000"
 ]
 
+# ⭐ MIDDLEWARE MUST COME FIRST
+app.add_middleware(LoggingMiddleware)
 
+# ⭐ CORS MUST COME AFTER LOGGING
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -39,14 +35,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ROUTES — include matrix router ONLY once
+# ⭐ ROUTES MUST COME LAST
 app.include_router(pricing_router, prefix="/pricing")
 app.include_router(matrix_router, prefix="/matrix")
 app.include_router(config_router, prefix="/config")
 app.include_router(admin_router, prefix="/admin")
-
-# MIDDLEWARE
-app.add_middleware(LoggingMiddleware)
 
 if __name__ == "__main__":
     import uvicorn
