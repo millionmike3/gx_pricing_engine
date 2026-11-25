@@ -1,183 +1,206 @@
-# backend/shared/pricing_engine.py
-
-import json
 import os
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from shared.matrix_loader import load_matrix
+
 
 class PricingEngine:
-    """
-    Core pricing engine for GenXBaby.
-    Loads pricing matrices, applies adjustments, overlays investor rules,
-    and produces final pricing output.
-    """
+    """Matrix-driven mortgage pricing engine."""
 
     def __init__(self, matrix_path: Optional[str] = None):
-        self.matrix_path = matrix_path or os.getenv("MATRIX_FILE", "data/pricing_matrix.json")
+        configured = matrix_path or os.getenv("MATRIX_FILE", "data/pricing_matrix.json")
+        path = Path(configured)
+        if not path.is_absolute():
+            path = Path(__file__).resolve().parents[1] / path
+        self.matrix_path = path
         self.matrix = self._load_matrix()
 
-    # ----------------------------------------------------------------------
-    # MATRIX LOADER
-    # ----------------------------------------------------------------------
     def _load_matrix(self) -> Dict[str, Any]:
-        """Load the pricing matrix from JSON."""
-        if not os.path.exists(self.matrix_path):
-            raise FileNotFoundError(f"Pricing matrix not found at {self.matrix_path}")
+        """Load the active matrix through the shared schema validator."""
+        return load_matrix(self.matrix_path)
 
-        with open(self.matrix_path, "r") as f:
-            return json.load(f)
+    @staticmethod
+    def _matches_range(value: float, label: str) -> bool:
+        label = str(label).strip()
+        if label.endswith("+"):
+            return value >= float(label[:-1])
+        if label.startswith("<="):
+            return value <= float(label[2:])
+        if label.startswith("<"):
+            return value < float(label[1:])
+        if "-" in label:
+            low, high = label.split("-", 1)
+            low = float(low)
+            high = high.strip()
+            if high.startswith("<"):
+                return value >= low and value < float(high[1:])
+            return value >= low and value <= float(high)
+        return value == float(label)
 
-    # ----------------------------------------------------------------------
-    # BASE RATE LOOKUP
-    # ----------------------------------------------------------------------
-    def get_base_rate(self, fico: int, ltv: float, loan_amount: float) -> float:
-        """
-        Pull base rate from matrix using FICO, LTV, and loan amount.
-        Matrix structure example:
-        {
-            "fico": {
-                "700-719": {
-                    "ltv": {
-                        "80-85": {
-                            "base_rate": 7.25
-                        }
-                    }
-                }
-            }
-        }
-        """
+    def _tier_adjustment(self, category: str, value: float) -> float:
+        tiers = self.matrix.get("pricingTiers", {}).get(category, [])
+        for tier in tiers:
+            if self._matches_range(value, tier["range"]):
+                return float(tier["adjustment"])
+        raise ValueError(
+            f"No {category} pricing tier found for value {value}."
+        )
 
-        fico_bucket = self._bucket_fico(fico)
-        ltv_bucket = self._bucket_ltv(ltv)
+    def _grid_adjustment(self, fico: int, ltv: float):
+        rows = self.matrix.get("llpa", {}).get("ficoLtvGrid", [])
+        for row in rows:
+            if self._matches_range(fico, row["fico"]):
+                for label, adjustment in row["ltvAdjustments"].items():
+                    if self._matches_range(ltv, label):
+                        return float(adjustment)
+                raise ValueError(f"No LLPA LTV tier found for LTV {ltv}.")
+        return None
 
-        try:
-            return self.matrix["fico"][fico_bucket]["ltv"][ltv_bucket]["base_rate"]
-        except KeyError:
-            raise ValueError(f"No base rate found for FICO={fico}, LTV={ltv}")
+    def calculate_price(
+        self,
+        params: Dict[str, Any],
+        use_llpa_grid: bool = False
+    ) -> Dict[str, Any]:
+        fico = int(params["fico"])
+        ltv = float(params["ltv"])
+        loan_amount = float(params["loan_amount"])
+        investor = params.get("investor", "SubstantialFunding")
+        occupancy = str(params.get("occupancy", "primary")).lower()
+        property_type = str(params.get("property_type", "single_family")).lower()
+        purpose = str(params.get("purpose", "purchase")).lower()
+        program = str(params.get("product_type", "")).lower()
+        rate_type = params.get("rate_type", "30yr_fixed")
 
-    # ----------------------------------------------------------------------
-    # BUCKET HELPERS
-    # ----------------------------------------------------------------------
-    def _bucket_fico(self, fico: int) -> str:
-        if fico >= 760:
-            return "760+"
-        if fico >= 740:
-            return "740-759"
-        if fico >= 720:
-            return "720-739"
-        if fico >= 700:
-            return "700-719"
-        if fico >= 680:
-            return "680-699"
-        return "<=679"
+        base_rates = self.matrix.get("baseRates", {})
+        if rate_type not in base_rates:
+            raise ValueError(f"Unknown rate_type: {rate_type}")
+        base_rate = float(base_rates[rate_type])
 
-    def _bucket_ltv(self, ltv: float) -> str:
-        if ltv <= 60:
-            return "0-60"
-        if ltv <= 70:
-            return "60-70"
-        if ltv <= 75:
-            return "70-75"
-        if ltv <= 80:
-            return "75-80"
-        if ltv <= 85:
-            return "80-85"
-        if ltv <= 90:
-            return "85-90"
-        return "90+"
+        eligibility = self.matrix.get("eligibilityRules", {})
+        max_ltv = eligibility.get("maxLtv", {}).get(occupancy)
+        if max_ltv is not None and ltv > float(max_ltv):
+            raise ValueError(
+                f"LTV {ltv} exceeds the {occupancy} program maximum of {max_ltv}."
+            )
 
-    # ----------------------------------------------------------------------
-    # ADJUSTMENTS ENGINE
-    # ----------------------------------------------------------------------
-    def apply_adjustments(self, base_rate: float, params: Dict[str, Any]) -> float:
-        """
-        Apply borrower-level adjustments:
-        - DSCR
-        - Property type
-        - Occupancy
-        - Loan purpose
-        - State overlays
-        """
+        min_fico = eligibility.get("minFico", {}).get(program)
+        if min_fico is not None and fico < int(min_fico):
+            raise ValueError(
+                f"FICO {fico} is below the {program} minimum of {min_fico}."
+            )
 
-        rate = base_rate
+        dti = params.get("dti")
+        max_dti = eligibility.get("maxDti", {}).get(
+            program, eligibility.get("maxDti", {}).get("standard")
+        )
+        if dti is not None and max_dti is not None and float(dti) > float(max_dti):
+            raise ValueError(
+                f"DTI {dti} exceeds the {program or 'standard'} maximum of {max_dti}."
+            )
 
-        # DSCR adjustments
+        grid_adjustment = self._grid_adjustment(fico, ltv) if use_llpa_grid else None
+        if grid_adjustment is not None:
+            fico_ltv_adjustment = grid_adjustment
+            adjustment_source = "llpa.ficoLtvGrid"
+        else:
+            fico_adjustment = self._tier_adjustment("fico", fico)
+            ltv_adjustment = self._tier_adjustment("ltv", ltv)
+            fico_ltv_adjustment = fico_adjustment + ltv_adjustment
+            adjustment_source = "pricingTiers"
+
+        llpa = self.matrix.get("llpa", {})
+        adjustments = {}
+
+        def add_adjustment(name, value):
+            if value is not None and float(value) != 0:
+                adjustments[name] = float(value)
+
+        add_adjustment(
+            "occupancy",
+            llpa.get("occupancy", {}).get(occupancy)
+        )
+        add_adjustment(
+            "loanPurpose",
+            llpa.get("loanPurpose", {}).get(purpose)
+        )
+        add_adjustment(
+            "propertyType",
+            llpa.get("propertyType", {}).get(property_type)
+        )
+
+        risk = self.matrix.get("riskFactors", {})
+        if dti is not None:
+            dti_rules = risk.get("dti", {})
+            if float(dti) > 50:
+                add_adjustment("dti", dti_rules.get("over_50"))
+            elif float(dti) > 45:
+                add_adjustment("dti", dti_rules.get("over_45"))
+
+        # State LLPA is separate from occupancy, property, and loan-purpose LLPA.
+        state = str(params.get("state", "")).strip().upper()
+        add_adjustment("state", llpa.get("state", {}).get(state))
+
+        # DSCR coverage-ratio pricing is separate from the DSCR loan-product adjustment.
         dscr = params.get("dscr")
         if dscr is not None:
-            if dscr < 1.0:
-                rate += 1.00
-            elif dscr < 1.2:
-                rate += 0.50
-            elif dscr < 1.4:
-                rate += 0.25
+            dscr_rules = risk.get("dscrRatio", [])
+            matched_dscr = False
+            for tier in dscr_rules:
+                if self._matches_range(float(dscr), tier["range"]):
+                    add_adjustment("dscrRatio", tier["adjustment"])
+                    matched_dscr = True
+                    break
+            if not matched_dscr:
+                raise ValueError(
+                    f"No DSCR ratio pricing tier found for value {dscr}."
+                )
 
-        # Property type
-        property_type = params.get("property_type")
-        if property_type == "condo":
-            rate += 0.25
-        elif property_type == "2-4 unit":
-            rate += 0.50
-        elif property_type == "mixed-use":
-            rate += 0.75
+        if params.get("first_time_homebuyer"):
+            add_adjustment(
+                "firstTimeHomebuyer",
+                risk.get("firstTimeHomebuyer")
+            )
 
-        # Occupancy
-        occupancy = params.get("occupancy")
-        if occupancy == "investment":
-            rate += 0.50
-        elif occupancy == "second_home":
-            rate += 0.25
+        if params.get("bankruptcy_seasoning_under_2_years"):
+            add_adjustment(
+                "bankruptcySeasoningUnder2Years",
+                risk.get("bankruptcySeasoningUnder2Years")
+            )
 
-        # Loan purpose
-        purpose = params.get("purpose")
-        if purpose == "cashout":
-            rate += 0.375
-        elif purpose == "delayed_financing":
-            rate += 0.25
+        if params.get("foreclosure_seasoning_under_3_years"):
+            add_adjustment(
+                "foreclosureSeasoningUnder3Years",
+                risk.get("foreclosureSeasoningUnder3Years")
+            )
 
-        # State overlays
-        state = params.get("state")
-        if state in ["NY", "NJ", "CA"]:
-            rate += 0.125
+        product_adjustment = self.matrix.get(
+            "productAdjustments", {}
+        ).get(program)
+        add_adjustment("product", product_adjustment)
 
-        return rate
-
-    # ----------------------------------------------------------------------
-    # INVESTOR OVERLAYS
-    # ----------------------------------------------------------------------
-    def apply_investor_overlays(self, rate: float, investor: str) -> float:
-        """
-        Apply investor-specific overlays.
-        """
-
-        overlays = {
+        # Preserve the existing investor overlays from the original engine.
+        investor_overlays = {
             "Bayview": 0.25,
             "AXA": 0.125,
             "Wealthfront": 0.375,
-            "SubstantialFunding": -0.10,  # Your own investor gets a discount
+            "SubstantialFunding": -0.10,
         }
+        investor_adjustment = float(investor_overlays.get(investor, 0.0))
 
-        return rate + overlays.get(investor, 0.0)
-
-    # ----------------------------------------------------------------------
-    # FINAL PRICING OUTPUT
-    # ----------------------------------------------------------------------
-    def calculate_price(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Main pricing function.
-        """
-
-        fico = params["fico"]
-        ltv = params["ltv"]
-        loan_amount = params["loan_amount"]
-        investor = params.get("investor", "SubstantialFunding")
-
-        base_rate = self.get_base_rate(fico, ltv, loan_amount)
-        adjusted_rate = self.apply_adjustments(base_rate, params)
-        final_rate = self.apply_investor_overlays(adjusted_rate, investor)
+        other_adjustments = sum(adjustments.values())
+        adjusted_rate = base_rate + fico_ltv_adjustment + other_adjustments
+        final_rate = adjusted_rate + investor_adjustment
 
         return {
-            "base_rate": round(base_rate, 3),
-            "adjusted_rate": round(adjusted_rate, 3),
-            "final_rate": round(final_rate, 3),
+            "base_rate": round(base_rate, 4),
+            "fico_ltv_adjustment": round(fico_ltv_adjustment, 4),
+            "adjustment_source": adjustment_source,
+            "adjustments": adjustments,
+            "investor_adjustment": round(investor_adjustment, 4),
+            "adjusted_rate": round(adjusted_rate, 4),
+            "final_rate": round(final_rate, 4),
             "investor": investor,
-            "inputs": params
+            "rate_type": rate_type,
+            "inputs": params,
         }

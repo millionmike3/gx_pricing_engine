@@ -5,106 +5,156 @@
     "source": "gx_pricing_engine",
     "description": "Unified pricing matrix aligned with TS pricing models"
   },
-
   "baseRates": {
-    "30yr_fixed": 6.250,
-    "15yr_fixed": 5.750,
+    "30yr_fixed": 6.25,
+    "15yr_fixed": 5.75,
     "10yr_fixed": 5.625,
-    "7_1_arm": 5.500,
+    "7_1_arm": 5.5,
     "5_1_arm": 5.375
   },
-
   "pricingTiers": {
     "fico": [
-      { "range": "760+", "adjustment": 0.00 },
-      { "range": "740-759", "adjustment": 0.125 },
-      { "range": "720-739", "adjustment": 0.250 },
-      { "range": "700-719", "adjustment": 0.375 },
-      { "range": "680-699", "adjustment": 0.500 },
-      { "range": "660-679", "adjustment": 0.750 },
-      { "range": "<660", "adjustment": 1.000 }
+      {
+        "range": "760+",
+        "adjustment": 0.0
+      },
+      {
+        "range": "740-759",
+        "adjustment": 0.125
+      },
+      {
+        "range": "720-739",
+        "adjustment": 0.25
+      },
+      {
+        "range": "700-719",
+        "adjustment": 0.375
+      },
+      {
+        "range": "680-699",
+        "adjustment": 0.5
+      },
+      {
+        "range": "660-679",
+        "adjustment": 0.75
+      },
+      {
+        "range": "<660",
+        "adjustment": 1.0
+      }
     ],
     "ltv": [
-      { "range": "0-60", "adjustment": 0.00 },
-      { "range": "60-75", "adjustment": 0.250 },
-      { "range": "75-80", "adjustment": 0.375 },
-      { "range": "80-85", "adjustment": 0.500 },
-      { "range": "85-95", "adjustment": 0.750 }
+      {
+        "range": "0-60",
+        "adjustment": 0.0
+      },
+      {
+        "range": "60-<75",
+        "adjustment": 0.25
+      },
+      {
+        "range": "75-<80",
+        "adjustment": 0.375
+      },
+      {
+        "range": "80-<85",
+        "adjustment": 0.5
+      },
+      {
+        "range": "85-95",
+        "adjustment": 0.75
+      }
     ]
   },
-
   "llpa": {
     "ficoLtvGrid": [
       {
         "fico": "760+",
         "ltvAdjustments": {
-          "0-60": 0.00,
-          "60-75": 0.125,
-          "75-80": 0.250,
-          "80-85": 0.375,
-          "85-95": 0.500
+          "0-60": 0.0,
+          "85-95": 0.5,
+          "60-<75": 0.125,
+          "75-<80": 0.25,
+          "80-<85": 0.375
         }
       },
       {
         "fico": "740-759",
         "ltvAdjustments": {
           "0-60": 0.125,
-          "60-75": 0.250,
-          "75-80": 0.375,
-          "80-85": 0.500,
-          "85-95": 0.625
+          "85-95": 0.625,
+          "60-<75": 0.25,
+          "75-<80": 0.375,
+          "80-<85": 0.5
         }
       },
       {
         "fico": "720-739",
         "ltvAdjustments": {
-          "0-60": 0.250,
-          "60-75": 0.375,
-          "75-80": 0.500,
-          "80-85": 0.625,
-          "85-95": 0.750
+          "0-60": 0.25,
+          "85-95": 0.75,
+          "60-<75": 0.375,
+          "75-<80": 0.5,
+          "80-<85": 0.625
         }
       }
     ],
-
     "occupancy": {
-      "primary": 0.00,
+      "primary": 0.0,
       "second_home": 0.375,
       "investment": 1.125
     },
-
     "loanPurpose": {
-      "purchase": 0.00,
+      "purchase": 0.0,
       "rate_term": 0.125,
-      "cash_out": 0.750
+      "cash_out": 0.75
     },
-
     "propertyType": {
-      "single_family": 0.00,
-      "condo": 0.250,
-      "non_warrantable_condo": 1.000,
-      "2_4_unit": 0.750
+      "single_family": 0.0,
+      "condo": 0.25,
+      "non_warrantable_condo": 1.0,
+      "2_4_unit": 0.75
+    },
+    "state": {
+      "NY": 0.125,
+      "NJ": 0.125,
+      "CA": 0.125
     }
   },
-
   "riskFactors": {
     "dti": {
-      "over_45": 0.250,
-      "over_50": 0.500
+      "over_45": 0.25,
+      "over_50": 0.5
     },
     "firstTimeHomebuyer": -0.125,
-    "bankruptcySeasoningUnder2Years": 1.500,
-    "foreclosureSeasoningUnder3Years": 2.000
+    "bankruptcySeasoningUnder2Years": 1.5,
+    "foreclosureSeasoningUnder3Years": 2.0,
+    "dscrRatio": [
+      {
+        "range": "<1.0",
+        "adjustment": 1.0
+      },
+      {
+        "range": "1.0-<1.2",
+        "adjustment": 0.5
+      },
+      {
+        "range": "1.2-<1.4",
+        "adjustment": 0.25
+      },
+      {
+        "range": "1.4+",
+        "adjustment": 0.0
+      }
+    ]
   },
-
   "productAdjustments": {
-    "jumbo": 0.750,
-    "non_qm": 1.500,
-    "dscr": 1.250,
-    "bank_statement": 2.000,
-    "asset_qualifier": 1.750
+    "jumbo": 0.75,
+    "non_qm": 1.5,
+    "dscr": 1.25,
+    "bank_statement": 2.0,
+    "asset_qualifier": 1.75
   },
-
   "eligibilityRules": {
     "maxLtv": {
       "primary": 95,

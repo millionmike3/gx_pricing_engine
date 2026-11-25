@@ -1,60 +1,178 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "../../services/api";
 
-interface FraudBucket {
-  fraud_risk_tier: string;
-  count: number;
-  avg_fraud_score: number;
+interface ControlAction {
+  action: string;
+  event_count: number;
 }
 
 interface FraudDashboardSummary {
-  total_loans: number;
-  buckets: FraudBucket[];
+  period_days: number;
+  control_events: number;
+  observed_control_actions: ControlAction[];
+  fraud_scores_available: boolean;
+  note: string;
 }
+
+function formatCount(value: number | undefined): string {
+  return Number(value ?? 0).toLocaleString();
+}
+
+const actionLabels: Record<string, string> = {
+  QUOTE_VALIDATION_FAILED: "Quote validation failures",
+  QUOTE_REJECTED: "Rejected quote requests",
+  MATRIX_VALIDATION_FAILED: "Pricing matrix validation failures",
+};
 
 export default function OwnerFraudDashboardPage() {
   const [data, setData] = useState<FraudDashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    axios
-      .get(`${process.env.NEXT_PUBLIC_API_URL}/owners/fraud/summary`, {
-        headers: { "x-admin-key": process.env.ADMIN_API_KEY },
-      })
-      .then(res => setData(res.data))
-      .catch(console.error);
+    let active = true;
+
+    const fetchData = async () => {
+      try {
+        const res = await api.get("/owners/fraud/summary");
+
+        if (active) {
+          setData(res.data as FraudDashboardSummary);
+          setError(null);
+        }
+      } catch {
+        if (active) {
+          setError(
+            "Unable to load pricing-control activity. Verify your access and activity database availability."
+          );
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  if (!data) return <div className="p-6 text-white">Loading fraud dashboard…</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#050505] p-6 text-white">
+        Loading pricing-control activity...
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-[#050505] p-6 text-white">
+        <h1 className="mb-3 text-2xl font-bold">
+          Pricing Controls & Risk Signals
+        </h1>
+        <div
+          role="alert"
+          className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-200"
+        >
+          {error || "Pricing-control data is unavailable."}
+        </div>
+      </div>
+    );
+  }
+
+  const actions = Array.isArray(data.observed_control_actions)
+    ? data.observed_control_actions
+    : [];
 
   return (
-    <div className="p-6 bg-[#050505] min-h-screen text-white">
-      <h1 className="text-2xl font-bold mb-4">Owner Fraud Intelligence Dashboard</h1>
-
-      <div className="mb-4 p-4 bg-black border border-white/10 rounded-lg">
-        <div className="text-sm text-gray-400">Total Loans</div>
-        <div className="text-2xl font-semibold">{data.total_loans}</div>
+    <div className="min-h-screen bg-[#050505] p-6 text-white">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">
+          Pricing Controls & Risk Signals
+        </h1>
+        <p className="mt-2 text-sm text-gray-400">
+          Recorded pricing-engine validation and control events over the
+          last {formatCount(data.period_days)} days.
+        </p>
       </div>
 
-      <table className="w-full text-sm bg-black border border-white/10 rounded-lg overflow-hidden">
-        <thead className="bg-white/5">
-          <tr>
-            <th className="px-3 py-2 text-left">Fraud Tier</th>
-            <th className="px-3 py-2 text-right">Count</th>
-            <th className="px-3 py-2 text-right">Avg Fraud Score</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.buckets.map(b => (
-            <tr key={b.fraud_risk_tier} className="border-t border-white/10">
-              <td className="px-3 py-2">{b.fraud_risk_tier}</td>
-              <td className="px-3 py-2 text-right">{b.count}</td>
-              <td className="px-3 py-2 text-right">{b.avg_fraud_score}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-white/10 bg-black p-5">
+          <div className="text-sm text-gray-400">
+            Recorded Control Events
+          </div>
+          <div className="mt-2 text-3xl font-semibold">
+            {formatCount(data.control_events)}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-white/10 bg-black p-5">
+          <div className="text-sm text-gray-400">
+            Fraud Scores
+          </div>
+          <div className="mt-2 text-xl font-semibold text-gray-300">
+            {data.fraud_scores_available
+              ? "Available"
+              : "Not available"}
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-white/10 bg-black p-5">
+        <h2 className="mb-4 text-lg font-semibold">
+          Observed Pricing-Control Events
+        </h2>
+
+        {actions.length === 0 ? (
+          <p className="text-sm text-gray-400">
+            No recorded control events were returned for this reporting
+            period. This does not establish that no validation issues
+            occurred.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {actions.map((item) => (
+              <div
+                key={item.action}
+                className="flex flex-col justify-between gap-2 border-b border-white/10 pb-3 sm:flex-row sm:items-center"
+              >
+                <div>
+                  <div className="font-medium">
+                    {actionLabels[item.action] || item.action}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {item.action}
+                  </div>
+                </div>
+
+                <div className="text-lg font-semibold tabular-nums">
+                  {formatCount(item.event_count)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+        <h2 className="mb-2 font-semibold">
+          Reporting Scope & Limitations
+        </h2>
+        <p className="text-sm leading-6 text-gray-400">
+          {data.note}
+        </p>
+        <p className="mt-3 text-sm leading-6 text-gray-400">
+          This dashboard reports recorded pricing-engine control events.
+          It does not independently determine fraud, assign borrower risk
+          scores, or establish fraudulent intent.
+        </p>
+      </div>
     </div>
   );
 }

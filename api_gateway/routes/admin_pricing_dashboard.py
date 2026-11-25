@@ -1,37 +1,35 @@
-# backend/api_gateway/routes/admin_pricing_dashboard.py
+from fastapi import APIRouter, HTTPException, Depends
+from api_gateway.middleware.auth_middleware import require_admin_or_owner
 
-import os
-import json
-from fastapi import APIRouter, HTTPException
 from shared.pricing_engine import PricingEngine
-from shared.borrower_rules import validate_borrower
+from shared.borrower_rules import validate_borrower, BorrowerValidationError
+from api_gateway.routes.matrix_routes import MATRIX_PATH, load_matrix
 
-router = APIRouter(tags=["Admin Pricing Dashboard"])
-
+router = APIRouter(tags=["Admin Pricing Dashboard"], dependencies=[Depends(require_admin_or_owner)])
 engine = PricingEngine()
 
-MATRIX_PATH = os.getenv("MATRIX_FILE", "data/pricing_matrix.json")
 
 @router.get("/matrix")
 def admin_get_matrix():
-    if not os.path.exists(MATRIX_PATH):
-        raise HTTPException(status_code=404, detail="Matrix file not found")
-    with open(MATRIX_PATH, "r") as f:
-        return json.load(f)
+    return load_matrix()
+
 
 @router.post("/test-scenario")
 def admin_test_scenario(payload: dict):
-    validation = validate_borrower(payload)
-    if not validation["valid"]:
-        return {"valid": False, "issues": validation["issues"]}
+    try:
+        borrower = validate_borrower(payload)
+        params = {**payload, **borrower}
+        result = engine.calculate_price(params)
+        return {"valid": True, "pricing": result}
+    except BorrowerValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
-    result = engine.calculate_price(payload)
-    return {"valid": True, "pricing": result}
 
 @router.get("/summary")
 def admin_summary():
     return {
         "service": "GenXBaby Pricing Engine",
-        "env": os.getenv("ENV", "local"),
-        "matrix_file": MATRIX_PATH,
+        "matrix_file": str(MATRIX_PATH),
     }

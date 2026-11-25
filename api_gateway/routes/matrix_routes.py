@@ -1,11 +1,13 @@
-
 import json
 import os
 import tempfile
 
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from api_gateway.middleware.auth_middleware import require_admin_or_owner
+from api_gateway.services.activity_store import record_activity
+from shared.matrix_loader import load_matrix as load_validated_matrix, validate_matrix
 from fastapi.responses import JSONResponse
 
 
@@ -27,40 +29,52 @@ if not MATRIX_PATH.is_absolute():
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
-def load_matrix():
-    """Load and validate the active pricing matrix file."""
+def _record_matrix_event(
+    action,
+    status,
+    user,
+    details=None,
+):
+    """Record safe matrix activity metadata on a best-effort basis."""
 
-    if not MATRIX_PATH.exists():
+    try:
+        user = user if isinstance(user, dict) else {}
+
+        record_activity(
+            action=action,
+            module="MATRIX",
+            actor_role=user.get("role", "UNKNOWN"),
+            actor_id=user.get("user_id"),
+            details=details or {},
+            status=status,
+        )
+    except Exception:
+        # Activity logging must never change matrix upload behavior.
+        pass
+
+
+def load_matrix():
+    """Load and validate the active pricing matrix using the shared schema."""
+
+    try:
+        return load_validated_matrix(MATRIX_PATH)
+
+    except FileNotFoundError:
         raise HTTPException(
             status_code=404,
             detail="Pricing matrix file not found."
         )
 
-    try:
-        with MATRIX_PATH.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if not isinstance(data, dict):
-            raise ValueError("Matrix must be a JSON object.")
-
-        return data
-
-    except json.JSONDecodeError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=500,
-            detail="Pricing matrix contains invalid JSON."
+            detail=f"Pricing matrix validation failed: {exc}"
         )
 
     except OSError:
         raise HTTPException(
             status_code=500,
             detail="Unable to read pricing matrix."
-        )
-
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=str(exc)
         )
 
 
@@ -117,14 +131,15 @@ def matrix_health():
 
 
 @router.post("/upload")
-async def upload_matrix(file: UploadFile = File(...)):
+async def upload_matrix(
+    file: UploadFile = File(...),
+    _user: dict = Depends(require_admin_or_owner),
+):
     """
     Upload a new pricing matrix.
 
-    Required sections:
-    - base_rates
-    - adjustments
-    - investor_overlays
+    The uploaded matrix must pass the shared pricing-matrix schema
+    and numeric validation before the active file can be replaced.
     """
 
     content_type = (file.content_type or "").split(";")[0].strip().lower()
@@ -158,24 +173,18 @@ async def upload_matrix(file: UploadFile = File(...)):
             detail="Matrix must be a JSON object."
         )
 
-    required_sections = [
-        "base_rates",
-        "adjustments",
-        "investor_overlays"
-    ]
-
-    missing_sections = [
-        section for section in required_sections
-        if section not in data
-    ]
-
-    if missing_sections:
+    try:
+        validate_matrix(data)
+    except ValueError as exc:
+        _record_matrix_event(
+            action="MATRIX_VALIDATION_FAILED",
+            status="FAILURE",
+            user=_user,
+            details={"stage": "MATRIX_SCHEMA_VALIDATION"},
+        )
         raise HTTPException(
             status_code=400,
-            detail={
-                "message": "Pricing matrix is missing required sections.",
-                "missing_sections": missing_sections
-            }
+            detail=f"Invalid pricing matrix: {exc}"
         )
 
     # Create the destination directory if necessary.
@@ -208,6 +217,14 @@ async def upload_matrix(file: UploadFile = File(...)):
 
         # Replace the active matrix atomically.
         os.replace(temp_path, MATRIX_PATH)
+
+        # Record metadata only, after the matrix replacement succeeds.
+        _record_matrix_event(
+            action="MATRIX_UPLOAD",
+            status="SUCCESS",
+            user=_user,
+            details={"sections": list(data.keys())},
+        )
 
         return {
             "status": "ok",

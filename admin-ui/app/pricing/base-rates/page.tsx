@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { api } from "../../../services/api";
 
 interface BaseRateRow {
   product_type: string;
@@ -12,14 +12,14 @@ export default function BaseRateEditorPage() {
   const [rows, setRows] = useState<BaseRateRow[]>([]);
 
   useEffect(() => {
-    axios
-      .get(`${process.env.NEXT_PUBLIC_API_URL}/pricing/base-rates`)
+    api
+      .get(`/pricing/base-rates`)
       .then(res => setRows(res.data))
       .catch(console.error);
   }, []);
 
   const updateRate = async (product_type: string, base_rate: number) => {
-    await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/pricing/base-rates`, {
+    await api.put("/pricing/base-rates", {
       product_type,
       base_rate,
     });

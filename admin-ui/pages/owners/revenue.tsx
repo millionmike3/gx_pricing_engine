@@ -1,93 +1,168 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-
-interface RevenueByProduct {
-  product_type: string;
-  total_loans: number;
-  total_revenue_bps: number;
-  total_revenue_dollars: number;
-}
+import { api } from "../../services/api";
 
 interface RevenueSummary {
-  total_loans: number;
-  total_revenue_dollars: number;
-  avg_margin_bps: number;
-  by_product: RevenueByProduct[];
+  period_days: number;
+  total_quote_requests: number;
+  successful_events: number;
+  failed_events: number;
+  estimated_revenue_available: boolean;
+  estimated_margin_available: boolean;
+  revenue_note: string;
+}
+
+function formatCount(value: number | undefined): string {
+  return Number(value ?? 0).toLocaleString();
 }
 
 export default function OwnerRevenueDashboardPage() {
   const [data, setData] = useState<RevenueSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+
     const fetchData = async () => {
-      const res = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/owners/revenue/summary`,
-        {
-          headers: {
-            "x-admin-key": process.env.ADMIN_API_KEY,
-          },
+      try {
+        const res = await api.get("/owners/revenue/summary");
+
+        if (active) {
+          setData(res.data as RevenueSummary);
+          setError(null);
         }
-      );
-      setData(res.data);
+      } catch {
+        if (active) {
+          setError(
+            "Unable to load pricing activity. Please verify your access and try again."
+          );
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
     };
 
-    fetchData().catch(console.error);
+    fetchData();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  if (!data) {
+  if (loading) {
     return (
-      <div className="p-6 text-white">
-        Loading owner revenue dashboard…
+      <div className="min-h-screen bg-[#050505] p-6 text-white">
+        Loading owner pricing activity...
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-[#050505] p-6 text-white">
+        <h1 className="mb-3 text-2xl font-bold">
+          Owner Pricing Activity
+        </h1>
+        <div
+          role="alert"
+          className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-200"
+        >
+          {error || "Pricing activity data is unavailable."}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-[#050505] min-h-screen text-white">
-      <h1 className="text-2xl font-bold mb-4">Owner Revenue Dashboard</h1>
+    <div className="min-h-screen bg-[#050505] p-6 text-white">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">
+          Owner Pricing Activity
+        </h1>
+        <p className="mt-2 text-sm text-gray-400">
+          Pricing-engine quote activity over the last{" "}
+          {formatCount(data.period_days)} days.
+        </p>
+      </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="p-4 bg-black border border-white/10 rounded-lg">
-          <div className="text-sm text-gray-400">Total Loans</div>
-          <div className="text-2xl font-semibold">{data.total_loans}</div>
-        </div>
-        <div className="p-4 bg-black border border-white/10 rounded-lg">
-          <div className="text-sm text-gray-400">Total Revenue</div>
-          <div className="text-2xl font-semibold">
-            ${data.total_revenue_dollars.toLocaleString()}
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black p-4">
+          <div className="text-sm text-gray-400">
+            Quote Requests
+          </div>
+          <div className="mt-2 text-2xl font-semibold">
+            {formatCount(data.total_quote_requests)}
           </div>
         </div>
-        <div className="p-4 bg-black border border-white/10 rounded-lg">
-          <div className="text-sm text-gray-400">Avg Margin (bps)</div>
-          <div className="text-2xl font-semibold">{data.avg_margin_bps}</div>
+
+        <div className="rounded-lg border border-white/10 bg-black p-4">
+          <div className="text-sm text-gray-400">
+            Successful Events
+          </div>
+          <div className="mt-2 text-2xl font-semibold text-green-400">
+            {formatCount(data.successful_events)}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-white/10 bg-black p-4">
+          <div className="text-sm text-gray-400">
+            Failed Events
+          </div>
+          <div className="mt-2 text-2xl font-semibold text-red-400">
+            {formatCount(data.failed_events)}
+          </div>
         </div>
       </div>
 
-      <h2 className="text-xl font-semibold mb-3">Revenue by Product</h2>
-      <table className="w-full text-sm bg-black border border-white/10 rounded-lg overflow-hidden">
-        <thead className="bg-white/5">
-          <tr>
-            <th className="px-3 py-2 text-left">Product</th>
-            <th className="px-3 py-2 text-right">Loans</th>
-            <th className="px-3 py-2 text-right">Revenue (bps)</th>
-            <th className="px-3 py-2 text-right">Revenue ($)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.by_product.map(p => (
-            <tr key={p.product_type} className="border-t border-white/10">
-              <td className="px-3 py-2">{p.product_type}</td>
-              <td className="px-3 py-2 text-right">{p.total_loans}</td>
-              <td className="px-3 py-2 text-right">{p.total_revenue_bps}</td>
-              <td className="px-3 py-2 text-right">
-                ${p.total_revenue_dollars.toLocaleString()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mb-6 rounded-lg border border-white/10 bg-black p-5">
+        <h2 className="mb-4 text-lg font-semibold">
+          Revenue and Margin Reporting
+        </h2>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <div className="text-sm text-gray-400">
+              Realized Revenue
+            </div>
+            <div className="mt-1 text-xl font-semibold text-gray-300">
+              {data.estimated_revenue_available
+                ? "Available"
+                : "Not available"}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm text-gray-400">
+              Pricing Margin
+            </div>
+            <div className="mt-1 text-xl font-semibold text-gray-300">
+              {data.estimated_margin_available
+                ? "Available"
+                : "Not available"}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-4 border-t border-white/10 pt-4 text-sm text-gray-400">
+          {data.revenue_note}
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+        <h2 className="mb-2 font-semibold">
+          Reporting Scope
+        </h2>
+        <p className="text-sm leading-6 text-gray-400">
+          This dashboard reports recorded pricing-engine activity,
+          including quote requests and operational outcomes. It does
+          not represent funded loans, collected fees, realized revenue,
+          or verified profit and loss.
+        </p>
+      </div>
     </div>
   );
 }

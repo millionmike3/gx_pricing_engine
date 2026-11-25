@@ -1,26 +1,38 @@
-# backend/jobs/daily_ingestion_job.py
+﻿import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-import os
-import json
-from datetime import datetime
-from shared.matrix_loader import load_matrix
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-LOG_PATH = os.getenv("INGEST_LOG", "logs/daily_ingestion.log")
-MATRIX_PATH = os.getenv("MATRIX_FILE", "data/pricing_matrix.json")
+from shared.matrix_loader import load_matrix, resolve_matrix_path
+
+
+LOG_PATH = Path(os.getenv("INGEST_LOG", "logs/daily_ingestion.log"))
 
 
 def run_daily_ingestion():
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
-        matrix = load_matrix(MATRIX_PATH)
-        # Here you’d plug in external feeds, overlays, etc.
-        # For now, we just log that ingestion ran successfully.
-        with open(LOG_PATH, "a") as f:
-            f.write(f"{datetime.utcnow().isoformat()} - Ingestion OK, matrix size: {len(matrix.get('fico', {}))}\n")
-    except Exception as e:
-        with open(LOG_PATH, "a") as f:
-            f.write(f"{datetime.utcnow().isoformat()} - Ingestion FAILED: {e}\n")
+        matrix = load_matrix()
+        timestamp = datetime.now(timezone.utc).isoformat()
+        message = (
+            f"{timestamp} - Unified matrix validation OK; "
+            f"path: {resolve_matrix_path()}; "
+            f"FICO tiers: {len(matrix['pricingTiers']['fico'])}; "
+            f"LTV tiers: {len(matrix['pricingTiers']['ltv'])}\n"
+        )
+        with LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(message)
+        return {"status": "ok", "message": message.strip()}
+    except Exception as exc:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        message = f"{timestamp} - Ingestion FAILED: {exc}\n"
+        with LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(message)
+        raise
 
 
 if __name__ == "__main__":
