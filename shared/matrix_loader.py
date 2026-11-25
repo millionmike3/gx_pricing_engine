@@ -79,6 +79,92 @@ def _validate_tier_list(section_name, entries):
             )
 
 
+
+def _parse_absolute_band(label, *, discrete=False):
+    """Convert a supported tier label into a half-open numeric interval."""
+    import re
+
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("Absolute grid tier labels must be non-empty strings.")
+
+    label = label.strip()
+    number = r"(?:\d+(?:\.\d*)?|\.\d+)"
+
+    if re.fullmatch(number + r"\+", label):
+        lower = float(label[:-1])
+        upper = math.inf
+    elif re.fullmatch(r"<=" + number, label):
+        value = float(label[2:])
+        lower = -math.inf
+        upper = value + 1.0 if discrete else math.nextafter(value, math.inf)
+    elif re.fullmatch(r"<" + number, label):
+        lower = -math.inf
+        upper = float(label[1:])
+    else:
+        match = re.fullmatch(
+            r"(" + number + r")-(?:<)?(" + number + r")", label
+        )
+        if match:
+            lower = float(match.group(1))
+            upper = float(match.group(2))
+            if "-" in label and "-<" not in label and discrete:
+                upper += 1.0
+            elif "-" in label and "-<" not in label:
+                upper = math.nextafter(upper, math.inf)
+        elif re.fullmatch(number, label):
+            lower = float(label)
+            upper = lower + 1.0 if discrete else math.nextafter(
+                lower, math.inf
+            )
+        else:
+            raise ValueError(f"Invalid absolute grid tier label: {label}")
+
+    if not lower < upper:
+        raise ValueError(f"Invalid or empty absolute grid tier: {label}")
+
+    return lower, upper
+
+
+def _validate_contiguous_bands(section_name, labels, *, discrete=False,
+                               expected_start=None):
+    """Reject malformed, overlapping, or incomplete ordered tier bands."""
+    if not labels:
+        raise ValueError(f"{section_name} must contain at least one band.")
+
+    if len(set(labels)) != len(labels):
+        raise ValueError(
+            f"{section_name} has overlapping or duplicate bands."
+        )
+
+    parsed = []
+    for label in labels:
+        lower, upper = _parse_absolute_band(label, discrete=discrete)
+        parsed.append((lower, upper, label))
+
+    parsed.sort(key=lambda item: item[0])
+
+    if expected_start == "unbounded" and parsed[0][0] != -math.inf:
+        raise ValueError(f"{section_name} must cover its lower range.")
+    if expected_start == 0 and parsed[0][0] != 0:
+        raise ValueError(f"{section_name} must start at 0.")
+
+    for previous, current in zip(parsed, parsed[1:]):
+        if previous[1] > current[0]:
+            raise ValueError(
+                f"{section_name} has overlapping or duplicate bands: "
+                f"{previous[2]} and {current[2]}."
+            )
+        if previous[1] < current[0]:
+            raise ValueError(
+                f"{section_name} has a gap between bands: "
+                f"{previous[2]} and {current[2]}."
+            )
+
+    if parsed[-1][1] != math.inf:
+        raise ValueError(f"{section_name} must cover its upper range.")
+
+    return [item[2] for item in parsed]
+
 def validate_matrix(matrix: Any) -> dict:
     if not isinstance(matrix, dict):
         raise ValueError("Pricing matrix must be a JSON object.")
@@ -139,6 +225,67 @@ def validate_matrix(matrix: Any) -> dict:
     # State overlays are intentionally optional.
     if "state" in llpa:
         _validate_numeric_map("llpa.state", llpa["state"])
+
+    # Absolute grids are optional for backward compatibility. When supplied,
+    # FICO and LTV bands must be complete, contiguous, and non-overlapping.
+    absolute_grids = matrix.get("absoluteRateGrids")
+    if absolute_grids is not None:
+        if not isinstance(absolute_grids, dict) or not absolute_grids:
+            raise ValueError(
+                "absoluteRateGrids must be a non-empty JSON object."
+            )
+
+        for rate_type, absolute_grid in absolute_grids.items():
+            section = f"absoluteRateGrids.{rate_type}"
+            if not isinstance(absolute_grid, dict):
+                raise ValueError(f"{section} must be a JSON object.")
+
+            rows = absolute_grid.get("ficoLtv")
+            if not isinstance(rows, list) or not rows:
+                raise ValueError(f"{section}.ficoLtv must be a non-empty array.")
+
+            fico_labels = []
+            expected_ltv_labels = None
+
+            for index, row in enumerate(rows):
+                row_name = f"{section}.ficoLtv[{index}]"
+                if not isinstance(row, dict):
+                    raise ValueError(f"{row_name} must be a JSON object.")
+
+                fico_label = row.get("fico")
+                if not isinstance(fico_label, str) or not fico_label.strip():
+                    raise ValueError(
+                        f"{row_name}.fico must be a non-empty string."
+                    )
+                fico_labels.append(fico_label.strip())
+
+                ltv_rates = row.get("ltvRates")
+                _validate_numeric_map(
+                    f"{row_name}.ltvRates",
+                    ltv_rates,
+                    positive=True,
+                )
+                ltv_labels = list(ltv_rates.keys())
+
+                if expected_ltv_labels is None:
+                    expected_ltv_labels = ltv_labels
+                elif ltv_labels != expected_ltv_labels:
+                    raise ValueError(
+                        f"{row_name}.ltvRates must use the same ordered "
+                        "LTV bands as every other FICO row."
+                    )
+
+            _validate_contiguous_bands(
+                f"{section}.ficoLtv FICO bands",
+                fico_labels,
+                discrete=True,
+                expected_start="unbounded",
+            )
+            _validate_contiguous_bands(
+                f"{section}.ficoLtv LTV bands",
+                expected_ltv_labels,
+                expected_start=0,
+            )
 
     risk = matrix["riskFactors"]
     if not isinstance(risk, dict):

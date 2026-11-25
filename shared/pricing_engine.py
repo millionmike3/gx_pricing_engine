@@ -1,4 +1,5 @@
 import os
+import math
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -57,6 +58,33 @@ class PricingEngine:
                 raise ValueError(f"No LLPA LTV tier found for LTV {ltv}.")
         return None
 
+    def _absolute_rate(self, rate_type: str, fico: int, ltv: float):
+        """Return an absolute rate from a configured FICO/LTV grid, if present."""
+        grids = self.matrix.get("absoluteRateGrids", {})
+        grid = grids.get(rate_type)
+        if grid is None:
+            return None
+
+        rows = grid.get("ficoLtv", [])
+        for row in rows:
+            if self._matches_range(fico, row["fico"]):
+                for label, rate in row["ltvRates"].items():
+                    if self._matches_range(ltv, label):
+                        value = float(rate)
+                        if not math.isfinite(value) or value <= 0:
+                            raise ValueError(
+                                f"Invalid absolute rate for {rate_type}, "
+                                f"FICO {fico}, LTV {ltv}."
+                            )
+                        return value
+                raise ValueError(
+                    f"No absolute-rate LTV tier found for LTV {ltv}."
+                )
+
+        raise ValueError(
+            f"No absolute-rate FICO tier found for FICO {fico}."
+        )
+
     def calculate_price(
         self,
         params: Dict[str, Any],
@@ -99,15 +127,25 @@ class PricingEngine:
                 f"DTI {dti} exceeds the {program or 'standard'} maximum of {max_dti}."
             )
 
-        grid_adjustment = self._grid_adjustment(fico, ltv) if use_llpa_grid else None
-        if grid_adjustment is not None:
-            fico_ltv_adjustment = grid_adjustment
-            adjustment_source = "llpa.ficoLtvGrid"
+        absolute_rate = self._absolute_rate(rate_type, fico, ltv)
+        if absolute_rate is not None:
+            # Absolute grid already includes FICO/LTV pricing. Do not stack
+            # the legacy FICO/LTV tier or LLPA-grid adjustments on top.
+            base_rate = absolute_rate
+            fico_ltv_adjustment = 0.0
+            adjustment_source = "absoluteRateGrids"
         else:
-            fico_adjustment = self._tier_adjustment("fico", fico)
-            ltv_adjustment = self._tier_adjustment("ltv", ltv)
-            fico_ltv_adjustment = fico_adjustment + ltv_adjustment
-            adjustment_source = "pricingTiers"
+            grid_adjustment = (
+                self._grid_adjustment(fico, ltv) if use_llpa_grid else None
+            )
+            if grid_adjustment is not None:
+                fico_ltv_adjustment = grid_adjustment
+                adjustment_source = "llpa.ficoLtvGrid"
+            else:
+                fico_adjustment = self._tier_adjustment("fico", fico)
+                ltv_adjustment = self._tier_adjustment("ltv", ltv)
+                fico_ltv_adjustment = fico_adjustment + ltv_adjustment
+                adjustment_source = "pricingTiers"
 
         llpa = self.matrix.get("llpa", {})
         adjustments = {}
