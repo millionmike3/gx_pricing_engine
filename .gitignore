@@ -20,3 +20,6 @@ htmlcov/
 .env.*
 !.env.example
 logs/
+
+# Local Admin UI environment configuration
+/admin-ui/.env.local

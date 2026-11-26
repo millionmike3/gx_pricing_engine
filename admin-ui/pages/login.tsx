@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useState } from "react";
 import { useAuth } from "../services/AuthProvider";
@@ -20,12 +20,20 @@ export default function LoginPage() {
       window.location.assign("/");
     } catch (err: any) {
       const status = err?.response?.status;
-      const message =
-        err?.response?.data?.message ||
-        (status === 401
-          ? "The email or password is incorrect."
-          : "Unable to sign in. Check the authentication service and try again.");
-      setError(Array.isArray(message) ? message.join(", ") : String(message));
+      const data = err?.response?.data;
+      const message = data?.message ?? data?.error ?? data?.detail;
+
+      setError(
+        typeof message === "string"
+          ? message
+          : Array.isArray(message)
+            ? message.join(", ")
+            : message && typeof message === "object"
+              ? JSON.stringify(message)
+              : status === 401
+                ? "The email or password is incorrect."
+                : "Unable to sign in. Please try again."
+      );
     } finally {
       setSubmitting(false);
     }
