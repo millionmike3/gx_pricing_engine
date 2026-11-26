@@ -50,6 +50,7 @@ origins = [
     "https://genxbaby-admin-frontend-1qld-ih9t1g8q4-millionmike3s-projects.vercel.app",
     "https://genxbaby-admin-frontend-1qld-qsc3smeo1-millionmike3s-projects.vercel.app",
     "https://gx-pricing-engine-fftl1pnkk-millionmike3s-projects.vercel.app",
+    "https://gx-pricing-engine-902nzhdn8-millionmike3s-projects.vercel.app",
 
     # Vercel team domain
     "https://millionmike3s-projects.vercel.app",
