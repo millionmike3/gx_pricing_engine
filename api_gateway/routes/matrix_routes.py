@@ -8,6 +8,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from api_gateway.middleware.auth_middleware import require_admin_or_owner
 from api_gateway.services.activity_store import record_activity
 from shared.matrix_loader import load_matrix as load_validated_matrix, validate_matrix
+from shared.engine_registry import MatrixActivationError, replace_matrix_and_refresh
 from fastapi.responses import JSONResponse
 
 
@@ -215,8 +216,9 @@ async def upload_matrix(
 
             temp_path = Path(temp_file.name)
 
-        # Replace the active matrix atomically.
-        os.replace(temp_path, MATRIX_PATH)
+        # Replace the active matrix and refresh engines with rollback protection.
+        replace_matrix_and_refresh(temp_path, MATRIX_PATH)
+        temp_path = None
 
         # Record metadata only, after the matrix replacement succeeds.
         _record_matrix_event(
@@ -232,10 +234,10 @@ async def upload_matrix(
             "sections": list(data.keys())
         }
 
-    except OSError:
+    except (OSError, MatrixActivationError):
         raise HTTPException(
             status_code=500,
-            detail="Unable to save pricing matrix."
+            detail="Unable to save and activate pricing matrix."
         )
 
     finally:

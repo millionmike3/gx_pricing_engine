@@ -1,18 +1,23 @@
+import json
+import math
+import os
+import tempfile
 import time
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pathlib import Path
 
-from shared.pricing_engine import PricingEngine
-from shared.pricing_engine_v2 import PricingEngineV2
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, StrictFloat, StrictInt, StrictStr
+
+from shared.engine_registry import get_engines, MatrixActivationError, replace_matrix_and_refresh
 from shared.borrower_rules import validate_borrower, BorrowerValidationError
+from shared.matrix_loader import resolve_matrix_path, validate_matrix
+from api_gateway.middleware.auth_middleware import require_admin_or_owner
 from api_gateway.services.activity_store import record_activity
 
 
 router = APIRouter(tags=["Pricing"])
 
-engine_v1 = PricingEngine()
-engine_v2 = PricingEngineV2()
 
 
 class PricingRequest(BaseModel):
@@ -101,6 +106,7 @@ def get_quote(req: PricingRequest):
         raise
 
     try:
+        engine_v1, engine_v2 = get_engines()
         if req.version == 1:
             result = engine_v1.calculate_price(params)
         else:
@@ -149,6 +155,7 @@ def compare_quote(req: PricingRequest):
         raise
 
     try:
+        engine_v1, engine_v2 = get_engines()
         result_v1 = engine_v1.calculate_price(params)
         result_v2 = engine_v2.calculate_price(params)
 
@@ -180,3 +187,134 @@ def compare_quote(req: PricingRequest):
             )
         }
     }
+
+class BaseRateUpdate(BaseModel):
+    product_type: StrictStr
+    base_rate: StrictFloat | StrictInt
+
+
+def _base_rate_matrix():
+    """Read the active matrix using the shared path and validation rules."""
+    from shared.matrix_loader import load_matrix
+
+    path = resolve_matrix_path()
+
+    try:
+        return path, load_matrix(path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Pricing matrix file not found.")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Pricing matrix validation failed: {exc}",
+        )
+    except OSError:
+        raise HTTPException(status_code=500, detail="Unable to read pricing matrix.")
+
+
+def _record_base_rate_event(user, status):
+    """Record metadata only; logging must never change the API response."""
+    try:
+        record_activity(
+            action="BASE_RATE_UPDATE",
+            module="PRICING",
+            actor_role=user.get("role", "UNKNOWN"),
+            actor_id=user.get("user_id"),
+            details={"section": "baseRates"},
+            status=status,
+        )
+    except Exception:
+        pass
+
+
+@router.get("/base-rates")
+def get_base_rates(
+    _user: dict = Depends(require_admin_or_owner),
+):
+    """Return editable base rates to authorized administrators."""
+    _, matrix = _base_rate_matrix()
+
+    return [
+        {"product_type": key, "base_rate": value}
+        for key, value in matrix["baseRates"].items()
+    ]
+
+
+@router.put("/base-rates")
+def update_base_rate(
+    update: BaseRateUpdate,
+    user: dict = Depends(require_admin_or_owner),
+):
+    """Safely update one existing base rate in the active pricing matrix."""
+    rate = update.base_rate
+
+    try:
+        numeric_rate = float(rate)
+    except (OverflowError, TypeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail="base_rate must be a finite positive number.",
+        )
+
+    if isinstance(rate, bool) or not math.isfinite(numeric_rate) or numeric_rate <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="base_rate must be a finite positive number.",
+        )
+
+    matrix_path, matrix = _base_rate_matrix()
+
+    if update.product_type not in matrix["baseRates"]:
+        raise HTTPException(
+            status_code=404,
+            detail="Unknown product_type. Existing base rates were not changed.",
+        )
+
+    matrix["baseRates"][update.product_type] = numeric_rate
+
+    try:
+        validate_matrix(matrix)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Updated pricing matrix failed validation: {exc}",
+        )
+
+    temp_path = None
+
+    try:
+        matrix_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".json",
+            prefix="pricing_matrix_",
+            dir=str(matrix_path.parent),
+            delete=False,
+        ) as temp_file:
+            json.dump(matrix, temp_file, indent=4, ensure_ascii=False)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+            temp_path = Path(temp_file.name)
+
+        replace_matrix_and_refresh(temp_path, matrix_path)
+        temp_path = None
+        _record_base_rate_event(user, "SUCCESS")
+
+        return {
+            "status": "ok",
+            "product_type": update.product_type,
+            "base_rate": matrix["baseRates"][update.product_type],
+        }
+
+    except (OSError, MatrixActivationError):
+        _record_base_rate_event(user, "FAILURE")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to save the updated base rate.",
+        )
+
+    finally:
+        if temp_path and temp_path.exists():
+            temp_path.unlink(missing_ok=True)

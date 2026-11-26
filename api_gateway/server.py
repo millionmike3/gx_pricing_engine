@@ -1,8 +1,14 @@
 
 import logging
+import os
+import tempfile
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from shared.matrix_loader import PROJECT_ROOT, load_matrix, resolve_matrix_path
+from shared.engine_registry import refresh_engines
 
 # ROUTERS
 from api_gateway.routes.pricing_routes import router as pricing_router
@@ -43,6 +49,7 @@ origins = [
     "https://genxbaby-admin-frontend-1qld-bqmcqdmtv-millionmike3s-projects.vercel.app",
     "https://genxbaby-admin-frontend-1qld-ih9t1g8q4-millionmike3s-projects.vercel.app",
     "https://genxbaby-admin-frontend-1qld-qsc3smeo1-millionmike3s-projects.vercel.app",
+    "https://gx-pricing-engine-fftl1pnkk-millionmike3s-projects.vercel.app",
 
     # Vercel team domain
     "https://millionmike3s-projects.vercel.app",
@@ -178,3 +185,55 @@ async def root():
             "documentation": "/docs"
         }
     }
+
+
+@app.on_event("startup")
+async def initialize_pricing_matrix_storage():
+    """Initialize persistent matrix storage without overwriting existing data."""
+    matrix_path = resolve_matrix_path()
+    seed_path = PROJECT_ROOT / "data" / "pricing_matrix.json"
+
+    if matrix_path.exists():
+        load_matrix(matrix_path)
+        refresh_engines(matrix_path)
+        logger.info("Loaded existing pricing matrix from %s", matrix_path)
+        return
+
+    if not seed_path.is_file():
+        raise RuntimeError(
+            f"Pricing matrix is missing from both persistent storage "
+            f"and the application seed: {matrix_path}"
+        )
+
+    load_matrix(seed_path)
+    matrix_path.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_path = None
+    try:
+        seed_bytes = seed_path.read_bytes()
+
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix="pricing_matrix_init_",
+            suffix=".json",
+            dir=str(matrix_path.parent),
+            delete=False,
+        ) as temp_file:
+            temp_file.write(seed_bytes)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+            temp_path = Path(temp_file.name)
+
+        if matrix_path.exists():
+            load_matrix(matrix_path)
+        else:
+            os.replace(temp_path, matrix_path)
+            temp_path = None
+
+        load_matrix(matrix_path)
+        refresh_engines(matrix_path)
+        logger.info("Initialized persistent pricing matrix at %s", matrix_path)
+
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)

@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from shared.pricing_engine import PricingEngine
 
@@ -6,8 +6,8 @@ from shared.pricing_engine import PricingEngine
 class PricingEngineV2:
     """Advanced pricing engine using the matrix LLPA grid when available."""
 
-    def __init__(self):
-        self.engine = PricingEngine()
+    def __init__(self, matrix_path: Optional[str] = None):
+        self.engine = PricingEngine(matrix_path=matrix_path)
 
     def calculate_price(self, params: Dict[str, Any]) -> Dict[str, Any]:
         result = self.engine.calculate_price(params, use_llpa_grid=True)
